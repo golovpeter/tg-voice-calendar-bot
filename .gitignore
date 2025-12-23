@@ -1,0 +1,21 @@
+# Environment
+.env
+.venv/
+venv/
+__pycache__/
+
+# Credentials
+credentials.json
+token.json
+tokens/
+users.json
+
+# Data
+data/
+
+# IDE
+.idea/
+.vscode/
+*.pyc
+*.pyo
+
