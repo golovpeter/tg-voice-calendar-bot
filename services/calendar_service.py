@@ -1,5 +1,6 @@
 import json
 import logging
+import time
 from typing import Optional
 
 from google.auth.transport.requests import Request
@@ -44,10 +45,13 @@ class CalendarService:
     """Сервис для работы с Google Calendar API (многопользовательский)"""
     
     def __init__(self):
-        # Кэш сервисов для пользователей
+        # Кэш сервисов для пользователей (в памяти для производительности)
         self._services: dict[int, any] = {}
-        # Pending flows для OAuth
-        self._pending_flows: dict[int, any] = {}
+        # Pending flows для OAuth (в памяти, так как содержат lambda функции)
+        # Формат: {user_id: (flow, timestamp)}
+        self._pending_flows: dict[int, tuple] = {}
+        # TTL для flows (10 минут)
+        self._flow_ttl = 600
     
     def _get_credentials(self, user_id: int) -> Optional[Credentials]:
         """Получить credentials из хранилища"""
@@ -108,12 +112,26 @@ class CalendarService:
         """Проверка авторизации пользователя"""
         return self.get_service(user_id) is not None
     
+    def _cleanup_expired_flows(self):
+        """Очистить истекшие flows"""
+        current_time = time.time()
+        expired_users = [
+            user_id for user_id, (_, timestamp) in self._pending_flows.items()
+            if current_time - timestamp > self._flow_ttl
+        ]
+        for user_id in expired_users:
+            del self._pending_flows[user_id]
+            logger.debug(f"🧹 Удалён истекший flow для пользователя {user_id}")
+    
     def get_auth_url(self, user_id: int) -> Optional[str]:
         """Получить URL для авторизации пользователя"""
         import os
         if not os.path.exists(GOOGLE_CREDENTIALS_FILE):
             logger.error(f"❌ Файл {GOOGLE_CREDENTIALS_FILE} не найден!")
             return None
+        
+        # Очищаем истекшие flows перед созданием нового
+        self._cleanup_expired_flows()
         
         try:
             flow = InstalledAppFlow.from_client_secrets_file(
@@ -126,8 +144,9 @@ class CalendarService:
                 include_granted_scopes='true',
                 prompt='consent'
             )
-            # Сохраняем flow для последующего обмена кода
-            self._pending_flows[user_id] = flow
+            # Сохраняем flow в памяти с timestamp (TTL 10 минут)
+            self._pending_flows[user_id] = (flow, time.time())
+            logger.info(f"💾 OAuth flow пользователя {user_id} сохранён в памяти (TTL: {self._flow_ttl}s)")
             return auth_url
         except Exception as e:
             logger.error(f"❌ Ошибка создания auth URL: {e}")
@@ -135,23 +154,33 @@ class CalendarService:
     
     def complete_auth(self, user_id: int, auth_code: str) -> bool:
         """Завершить авторизацию с полученным кодом"""
-        flow = self._pending_flows.get(user_id)
+        # Очищаем истекшие flows перед проверкой
+        self._cleanup_expired_flows()
         
-        if not flow:
+        flow_data = self._pending_flows.get(user_id)
+        if not flow_data:
             logger.error(f"❌ Нет pending flow для пользователя {user_id}")
+            return False
+        
+        flow, timestamp = flow_data
+        
+        # Проверяем, не истек ли flow
+        if time.time() - timestamp > self._flow_ttl:
+            logger.error(f"❌ Flow для пользователя {user_id} истёк")
+            del self._pending_flows[user_id]
             return False
         
         try:
             flow.fetch_token(code=auth_code)
             creds = flow.credentials
             
-            # Сохраняем токен в SQLite
+            # Сохраняем токен в Redis
             if not self._save_credentials(user_id, creds):
                 return False
             
             logger.info(f"✅ Пользователь {user_id} успешно авторизован")
             
-            # Очищаем pending flow
+            # Очищаем pending flow из памяти
             del self._pending_flows[user_id]
             
             # Убираем из кэша чтобы пересоздать сервис
@@ -162,6 +191,9 @@ class CalendarService:
             
         except Exception as e:
             logger.error(f"❌ Ошибка завершения авторизации: {e}")
+            # Удаляем flow при ошибке
+            if user_id in self._pending_flows:
+                del self._pending_flows[user_id]
             return False
     
     def disconnect(self, user_id: int):

@@ -1,12 +1,38 @@
 import os
-from dotenv import load_dotenv
+from pathlib import Path
 
-load_dotenv()
+# Загружаем .env файл если он существует
+try:
+    from dotenv import load_dotenv
+    env_path = Path(__file__).parent / ".env"
+    if env_path.exists():
+        load_dotenv(env_path)
+except ImportError:
+    # python-dotenv не установлен, это нормально
+    pass
 
 # ============= КОНФИГУРАЦИЯ =============
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+if not TELEGRAM_BOT_TOKEN:
+    raise ValueError(
+        "❌ TELEGRAM_BOT_TOKEN не установлен!\n"
+        "Установите переменную окружения:\n"
+        "  export TELEGRAM_BOT_TOKEN='your_token'\n"
+        "Или создайте файл .env с содержимым:\n"
+        "  TELEGRAM_BOT_TOKEN=your_token"
+    )
+
 AUTHORIZATION_KEY = os.getenv("GIGACHAT_AUTH_KEY")
+if not AUTHORIZATION_KEY:
+    raise ValueError(
+        "❌ GIGACHAT_AUTH_KEY не установлен!\n"
+        "Установите переменную окружения:\n"
+        "  export GIGACHAT_AUTH_KEY='your_key'\n"
+        "Или создайте файл .env с содержимым:\n"
+        "  GIGACHAT_AUTH_KEY=your_key"
+    )
+
 GIGACHAT_MODEL = os.getenv("GIGACHAT_MODEL", "GigaChat-2-Pro")
 
 # ============= GOOGLE CALENDAR =============

@@ -17,8 +17,10 @@ class Storage:
         logger.info("✅ Redis подключен")
     
     def _key(self, user_id: int) -> str:
-        """Формируем ключ для пользователя"""
+        """Формируем ключ для токена пользователя"""
         return f"user:{user_id}:token"
+    
+    # ============= Методы для токенов =============
     
     def save_token(self, user_id: int, token_data: dict) -> bool:
         """Сохранить OAuth токен пользователя"""
@@ -54,6 +56,10 @@ class Storage:
     def has_token(self, user_id: int) -> bool:
         """Проверить есть ли токен у пользователя"""
         return self.redis.exists(self._key(user_id)) > 0
+    
+    # ============= Методы для OAuth flows =============
+    # Примечание: OAuth flows хранятся в памяти CalendarService, так как содержат
+    # lambda функции, которые нельзя сериализовать через pickle
 
 
 # Синглтон
