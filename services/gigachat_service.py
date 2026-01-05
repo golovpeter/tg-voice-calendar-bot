@@ -1,10 +1,13 @@
 import json
 import logging
+import os
+import tempfile
 from datetime import datetime
 from typing import Optional
 
 from langchain_gigachat.chat_models import GigaChat
 from langchain_core.messages import HumanMessage, SystemMessage
+from pydub import AudioSegment
 
 from config import (
     AUTHORIZATION_KEY,
@@ -35,48 +38,58 @@ class GigaChatService:
         """Расшифровка аудио файла"""
         logger.info(f"🎤 Начинаю расшифровку аудио: {audio_file_path}")
         
-        # 1. Загружаем файл в GigaChat
-        with open(audio_file_path, "rb") as f:
-            uploaded_file = self.giga.upload_file(f, purpose="general")
-        
-        file_id = uploaded_file.id_
-        logger.info(f"📤 Файл загружен, ID: {file_id}")
-        
-        # Логируем информацию о загруженном файле
-        upload_info = {
-            "id": uploaded_file.id_,
-            "filename": uploaded_file.filename,
-            "bytes": uploaded_file.bytes_,
-            "purpose": uploaded_file.purpose,
-        }
-        logger.debug(f"📋 Upload response: {json.dumps(upload_info, ensure_ascii=False, indent=2)}")
+        # Конвертируем OGG в MP3 для совместимости с GigaChat
+        sound = AudioSegment.from_file(audio_file_path, format="ogg")
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp_mp3:
+            sound.export(tmp_mp3.name, format="mp3")
+            tmp_mp3_path = tmp_mp3.name
         
         try:
-            # 2. Отправляем запрос с прикрепленным файлом
-            messages = [
-                SystemMessage(content=TRANSCRIPTION_PROMPT),
-                HumanMessage(
-                    content="Расшифруй этот аудиофайл",
-                    additional_kwargs={"attachments": [file_id]}
-                )
-            ]
+            # 1. Загружаем файл в GigaChat
+            with open(tmp_mp3_path, "rb") as f:
+                uploaded_file = self.giga.upload_file(f, purpose="general")
             
-            logger.debug(f"📨 Отправляю запрос на расшифровку с file_id: {file_id}")
-            response = self.giga.invoke(messages)
+            file_id = uploaded_file.id_
+            logger.info(f"📤 Файл загружен, ID: {file_id}")
             
-            # Логируем полный ответ API
-            response_info = {
-                "content": response.content,
-                "type": response.type,
-                "response_metadata": response.response_metadata if hasattr(response, "response_metadata") else None,
+            # Логируем информацию о загруженном файле
+            upload_info = {
+                "id": uploaded_file.id_,
+                "filename": uploaded_file.filename,
+                "bytes": uploaded_file.bytes_,
+                "purpose": uploaded_file.purpose,
             }
-            logger.info(f"📥 Transcription API response: {json.dumps(response_info, ensure_ascii=False, indent=2)}")
+            logger.debug(f"📋 Upload response: {json.dumps(upload_info, ensure_ascii=False, indent=2)}")
             
-            return response.content
+            try:
+                # 2. Отправляем запрос с прикрепленным файлом
+                messages = [
+                    SystemMessage(content=TRANSCRIPTION_PROMPT),
+                    HumanMessage(
+                        content="Расшифруй этот аудиофайл",
+                        additional_kwargs={"attachments": [file_id]}
+                    )
+                ]
+                
+                logger.debug(f"📨 Отправляю запрос на расшифровку с file_id: {file_id}")
+                response = self.giga.invoke(messages)
+                
+                # Логируем полный ответ API
+                response_info = {
+                    "content": response.content,
+                    "type": response.type,
+                    "response_metadata": response.response_metadata if hasattr(response, "response_metadata") else None,
+                }
+                logger.info(f"📥 Transcription API response: {json.dumps(response_info, ensure_ascii=False, indent=2)}")
+                
+                return response.content
             
+            finally:
+                # 3. Удаляем файл после обработки
+                self._delete_file(file_id)
+        
         finally:
-            # 3. Удаляем файл после обработки
-            self._delete_file(file_id)
+            os.unlink(tmp_mp3_path)
     
     def parse_event(self, text: str) -> Optional[dict]:
         """Извлечение данных события из текста"""

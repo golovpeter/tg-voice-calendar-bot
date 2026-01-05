@@ -1,0 +1,85 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "tg-calendar-bot.fullname" . }}
+  namespace: {{ include "tg-calendar-bot.namespace" . }}
+  labels:
+    {{- include "tg-calendar-bot.bot.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.bot.replicas }}
+  selector:
+    matchLabels:
+      {{- include "tg-calendar-bot.bot.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "tg-calendar-bot.bot.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "tg-calendar-bot.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      - name: bot
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: REDIS_URL
+          value: {{ include "tg-calendar-bot.redisUrl" . | quote }}
+        - name: GIGACHAT_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: {{ include "tg-calendar-bot.fullname" . }}-config
+              key: gigachat-model
+        - name: TELEGRAM_BOT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "tg-calendar-bot.fullname" . }}-secrets
+              key: telegram-bot-token
+        - name: GIGACHAT_AUTH_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ include "tg-calendar-bot.fullname" . }}-secrets
+              key: gigachat-auth-key
+        volumeMounts:
+        - name: google-credentials
+          mountPath: /app/credentials.json
+          subPath: credentials.json
+          readOnly: true
+        resources:
+          {{- toYaml .Values.bot.resources | nindent 10 }}
+        {{- if .Values.bot.livenessProbe.enabled }}
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: {{ .Values.bot.livenessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.bot.livenessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.bot.livenessProbe.timeoutSeconds }}
+        {{- end }}
+        {{- if .Values.bot.readinessProbe.enabled }}
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: {{ .Values.bot.readinessProbe.initialDelaySeconds }}
+          periodSeconds: {{ .Values.bot.readinessProbe.periodSeconds }}
+          timeoutSeconds: {{ .Values.bot.readinessProbe.timeoutSeconds }}
+        {{- end }}
+      volumes:
+      - name: google-credentials
+        secret:
+          secretName: {{ include "tg-calendar-bot.fullname" . }}-secrets
+          items:
+          - key: google-credentials
+            path: credentials.json
+

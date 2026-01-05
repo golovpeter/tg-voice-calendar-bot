@@ -1,0 +1,5 @@
+# Игнорируем заполненные секреты
+secret.yaml
+*-secret.yaml
+secrets.yaml
+

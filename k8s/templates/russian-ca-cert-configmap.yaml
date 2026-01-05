@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: russian-ca
+  namespace: {{ .Release.Namespace }}
+data:
+  russian_trusted_root_ca.crt: |
+{{ .Files.Get "certs/russian_trusted_root_ca.crt" | indent 4 }}

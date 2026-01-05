@@ -1,0 +1,118 @@
+# Default values for tg-calendar-bot
+# This is a YAML-formatted file.
+
+# Общие настройки
+nameOverride: ""
+fullnameOverride: ""
+
+# Namespace
+namespace:
+  create: true
+  name: tg-calendar-bot
+
+# Настройки образа бота
+image:
+  repository: tg-calendar-bot
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+# - name: regcred
+
+# Настройки бота
+bot:
+  replicas: 1
+  
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+  
+  # Переменные окружения
+  env:
+    # Redis URL будет автоматически сформирован из имени сервиса Redis
+    redisUrl: ""  # Если пусто, будет использован redis://{{ .Values.redis.name }}:6379/0
+    gigachatModel: "GigaChat-2-Pro"
+  
+  # Liveness и Readiness пробы
+  livenessProbe:
+    enabled: true
+    initialDelaySeconds: 30
+    periodSeconds: 30
+    timeoutSeconds: 5
+  
+  readinessProbe:
+    enabled: true
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    timeoutSeconds: 5
+
+# Настройки Redis
+redis:
+  enabled: true
+  name: redis
+  
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
+  
+  replicas: 1
+  
+  # Использовать PersistentVolume для Redis
+  persistence:
+    enabled: false
+    size: 1Gi
+    storageClass: ""  # Если пусто, используется default StorageClass
+    accessMode: ReadWriteOnce
+  
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "256Mi"
+      cpu: "200m"
+  
+  # Настройки Redis
+  config:
+    save: "60 1"
+    loglevel: "warning"
+    appendonly: "yes"
+
+# Secrets
+secrets:
+  # Telegram Bot Token
+  telegramBotToken: ""
+  
+  # GigaChat Authorization Key
+  gigachatAuthKey: ""
+  
+  # Google OAuth2 Credentials (JSON содержимое файла credentials.json)
+  googleCredentials: ""
+
+# ConfigMap
+configMap:
+  gigachatModel: "GigaChat-2-Pro"
+
+# ServiceAccount
+serviceAccount:
+  create: false
+  name: ""
+
+# Pod Security Context
+podSecurityContext: {}
+  # fsGroup: 2000
+
+# Security Context
+securityContext: {}
+  # capabilities:
+  #   drop:
+  #   - ALL
+  # readOnlyRootFilesystem: true
+  # runAsNonRoot: true
+  # runAsUser: 1000
+
