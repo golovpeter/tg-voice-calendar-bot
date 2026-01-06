@@ -12,8 +12,8 @@ namespace:
 # Настройки образа бота
 image:
   repository: your-registry/tg-calendar-bot  # Замените на ваш registry
-  pullPolicy: Always
-  tag: "v1.0.0"  # Используйте конкретную версию в production
+  pullPolicy: IfNotPresent
+  tag: "latest"  # Используйте конкретную версию в production
 
 imagePullSecrets:
   - name: regcred  # Если нужен pull secret для private registry
