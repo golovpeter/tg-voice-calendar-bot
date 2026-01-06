@@ -2,7 +2,7 @@
 # Использование: helm install tg-calendar-bot . -f values-production.yaml
 
 # Общие настройки
-fullnameOverride: "tg-calendar-bot"
+fullnameOverride: ""
 
 # Namespace
 namespace:
